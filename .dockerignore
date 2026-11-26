@@ -1,0 +1,8 @@
+# Apenas os arquivos necessários entram no contexto de compilação.
+*
+!Dockerfile
+!requirements.txt
+!server.py
+!client_tests.py
+!audit_storage.py
+!file_test_fixture.py

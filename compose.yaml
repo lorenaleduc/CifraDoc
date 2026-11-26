@@ -1,0 +1,91 @@
+x-demo-passwords: &demo-passwords
+  DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-AdminLab!2026}
+  DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-AlunoLab!2026}
+  DEMO_OTHER_PASSWORD: ${DEMO_OTHER_PASSWORD:-ColegaLab!2026}
+
+services:
+  server:
+    build:
+      context: .
+      target: server
+    init: true
+    environment:
+      <<: *demo-passwords
+      HOST: 0.0.0.0
+      PORT: "8443"
+      DATA_DIR: /app/data
+      KEY_DIR: /app/keys
+      TLS_DIR: /app/tls
+      TLS_CERT_DIR: /app/cert
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - documents_data:/app/data
+      - key_data:/app/keys
+      - tls_data:/app/tls
+      - public_cert:/app/cert
+    networks:
+      - lab_network
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      # A prontidão exige HTTPS com certificado validado e resposta do portal.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import http.client
+          import ssl
+
+          context = ssl.create_default_context(cafile="/app/cert/server.crt")
+          connection = http.client.HTTPSConnection("localhost", 8443, timeout=5, context=context)
+          connection.request("GET", "/health")
+          status = connection.getresponse().status
+          connection.close()
+          raise SystemExit(status != 200)
+      interval: 5s
+      timeout: 12s
+      retries: 12
+      start_period: 15s
+
+  tester:
+    build:
+      context: .
+      target: tester
+    environment:
+      <<: *demo-passwords
+      BASE_URL: https://server:8443
+      CA_CERT: /app/cert/server.crt
+    volumes:
+      - type: volume
+        source: public_cert
+        target: /app/cert
+        read_only: true
+        volume:
+          nocopy: true
+    networks:
+      - lab_network
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      server:
+        condition: service_healthy
+
+networks:
+  lab_network:
+    driver: bridge
+
+volumes:
+  documents_data:
+  key_data:
+  tls_data:
+  public_cert:
