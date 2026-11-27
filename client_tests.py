@@ -2,6 +2,7 @@
 
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from html.parser import HTMLParser
 import http.cookiejar
 from ipaddress import ip_address
@@ -153,9 +154,19 @@ def event_rows(response):
     return Counter(PortalHTML(response.body).rows) if response.status == 200 else Counter()
 
 
+def valid_log_date(value):
+    if not re.fullmatch(r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}", value):
+        return False
+    try:
+        datetime.strptime(value, "%d/%m/%Y %H:%M:%S")
+        return True
+    except ValueError:
+        return False
+
+
 def recent_event(before, after, code):
     return any(
-        row[2] == code and re.fullmatch(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC', row[0])
+        row[2] == code and valid_log_date(row[0])
         for row in after - before
     )
 
@@ -362,7 +373,7 @@ def exercise(report):
     logged_rows = event_rows(logged)
     protected_values = (admin_password, user_password, other_password, INVALID_PASSWORD, token, title, content)
     log_text = ' '.join(' '.join(row) for row in logged_rows)
-    report.check(14, 'Registro administrativo de detecção e bloqueio, com data UTC',
+    report.check(14, 'Registro administrativo de detecção e bloqueio, com data no horário de Brasília',
                  logged.status == 200 and recent_event(before, logged_rows, 'DETECCAO_FORCA_BRUTA')
                  and recent_event(before, logged_rows, 'LOGIN_BLOQUEADO')
                  and all(value not in log_text for value in protected_values), f'HTTP {logged.status}')
